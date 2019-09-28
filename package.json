@@ -1,0 +1,18 @@
+{
+  "name": "users-service",
+  "version": "0.0.1",
+  "main": "index.js",
+  "repository": "git@github.com:fluxwares/users-service.git",
+  "author": "Sofus Skovgaard <sofus.skovgaard@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "koa": "^2.8.2",
+    "koa-bodyparser": "^4.2.1",
+    "koa-helmet": "^5.1.0",
+    "koa-router": "^7.4.0"
+  }
+}
