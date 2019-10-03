@@ -1,0 +1,109 @@
+version: 2
+
+defaults: &defaults
+  working_directory: ~/app
+  docker:
+    - image: circleci/node:latest
+
+jobs:
+  install:
+    <<: *defaults
+    steps:
+      - checkout
+      - run: npm install
+      - persist_to_workspace:
+          root: ~/
+          paths:
+            - app
+
+  test:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/
+      - run: ls -a
+      - run: npm run test
+
+  lint:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/
+      - run: ls -a
+      - run: npm run lint
+
+  build:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run: |
+          TAG=$CIRCLE_BRANCH-$CIRCLE_SHA1
+          docker build -t sofusskovgaard/users-service:$TAG .
+          echo "$DOCKER_PASS" | docker login --username $DOCKER_USER --password-stdin
+          docker push sofusskovgaard/users-service:$TAG
+  
+  deploy:
+    <<: *defaults
+    steps:
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Install kubectl
+          command: |
+              sudo apt-get update && sudo apt-get install -y apt-transport-https
+              curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+              echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee -a /etc/apt/sources.list.d/kubernetes.list
+              sudo apt-get update
+              sudo apt-get install -y kubectl
+      - run:
+          name: Install doctl
+          command: |
+              curl -sL https://github.com/digitalocean/doctl/releases/download/v1.32.3/doctl-1.32.3-linux-amd64.tar.gz | tar -xzv
+              chmod +x ./doctl
+              sudo mv ./doctl /usr/local/bin/doctl
+              doctl version
+      - run:
+          name: Install envsubst
+          command: |
+            sudo apt-get update && sudo apt-get -y install gettext-base
+      - run:
+          name: Authorize doctl
+          command: doctl auth init -t $DO_TOKEN
+      - run:
+          name: Connect to cluster
+          command: doctl kubernetes cluster kubeconfig save $DO_CLUSTER
+      - run:
+          name: Get pods
+          command: kubectl get pods
+      - run:
+          name: Deploy Code
+          command: .circleci/deploy.sh
+
+workflows:
+  version: 2
+  master-workflow:
+    jobs:
+      - install
+      - test:
+          requires:
+            - install
+      - lint:
+          requires:
+            - install
+      - build:
+          context: FluxWares      
+          requires:
+            - test
+            - lint
+      - deploy:
+          filters:
+            branches:
+              only:
+                - staging
+                - master
+          context: FluxWares
+          requires:
+            - build
